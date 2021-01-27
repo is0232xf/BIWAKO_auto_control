@@ -160,11 +160,10 @@ def PD_control_dis(distance):
     return t_out
 
 def PD_control_deg(diff_deg):
-    Kp = const.degree_Kp
-    Kd = const.degree_Kd
-
     MAX_PULSE = const.MAX_PULSE
     MIN_PULSE = const.MIN_PULSE
+    Kp = const.degree_Kp
+    Kd = const.degree_Kd
 
     diff_e = e_deg[len(e_deg)-2]-e_deg[len(e_deg)-1]
     inv = 1

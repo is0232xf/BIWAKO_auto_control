@@ -3,12 +3,12 @@ import time
 import mpu
 import csv
 import datetime
-import json
 import math
 import signal
 import threading
 
 import numpy as np
+from const import parameter
 from pymavlink import mavutil
 from geopy.distance import geodesic
 from robot import Robot
@@ -137,10 +137,11 @@ def decide_next_action(pose, start_time, distace_tolerance, heading_torelance):
     return action
 
 def PD_control_dis(distance):
-    MAX_PWM = 1812
-    MIN_PWM = 1212
-    Kp = 15
-    Kd = 1.5
+    MAX_PULSE = const.MAX_PULSE
+    MIN_PULSE = const.MIN_PULSE
+    Kp = const.distance_Kp
+    Kd = const.distance_Kd
+    
     diff_e = e_dis[len(e_dis)-2]-e_dis[len(e_dis)-1]
 
     t_out = int(1500 + Kp * distance + Kd * diff_e)
@@ -153,11 +154,10 @@ def PD_control_dis(distance):
     return t_out
 
 def PD_control_deg(diff_deg):
-    Kp = 1.2
-    Kd = 0.8
-
-    MAX_PULSE = 1662
-    MIN_PULSE = 1362
+    MAX_PULSE = const.MAX_PULSE
+    MIN_PULSE = const.MIN_PULSE
+    Kp = const.degree_Kp
+    Kd = const.degree_Kd
 
     diff_e = e_deg[len(e_deg)-2]-e_deg[len(e_deg)-1]
     inv = 1
@@ -201,6 +201,8 @@ print("Arm/Disarm: Arm")
 
 BIWAKO = Robot(target_point)
 Sensor = WT_sensor()
+const = parameter()
+
 update_wt_thread = threading.Thread(target=update_wt)
 update_wt_thread.start()
 
@@ -213,17 +215,14 @@ isKeep_position = False
 start_time = 0.0
 
 if __name__ == '__main__':
-    # import and read comfig file
-    params_file = open("params.json", "r")
-    params = json.load(params_file)
     
-    state_data_log = params["Config"]["state_data_log"]
-    debug_mode = params["Config"]["debug_mode"]
+    state_data_log = const.data_log_mode
+    debug_mode = const.debug_mode
     
-    distance_torelance = params["Controller"]["distance_torelance"]
-    heading_torelance = params["Controller"]["heading_torelance"]
+    distance_torelance = const.distance_torelance
+    heading_torelance = const.heading_torelance
+    keep_time = const.duration
 
-    keep_time = params["Time"]["duration"]
     print("duration: ", keep_time )
     
     if (state_data_log==True):
