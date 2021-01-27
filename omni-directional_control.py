@@ -108,7 +108,7 @@ def decide_next_action(pose, start_time, distace_tolerance, heading_torelance):
         isKeep_position = True
 	    
         if start_time == 0.0:
-		        start_time = time.time()
+            start_time = time.time()
         print("Keep the position")
         print("########################")
         return action
@@ -118,58 +118,43 @@ def decide_next_action(pose, start_time, distace_tolerance, heading_torelance):
         target_direction = math.radians(calculator.calculate_bearing(current_point, BIWAKO.next_goal))
         diff_deg =  math.degrees(calculator.limit_angle(target_direction - current_yaw))
         e_deg.append(diff_deg)
-        if abs(diff_deg) < heading_torelance:
+
+        pwm = P_control(diff_distance)
+        if -45.0 <= diff_deg < 45:
             ch = 5
-            pwm = PD_control_dis(diff_distance)
-            print("Straight")
-        elif diff_deg >= heading_torelance:
-            ch = 4
-            pwm = PD_control_deg(diff_deg)
-            print("Turn right")
-        elif diff_deg < -1.0 * heading_torelance:
-            ch = 4
-            pwm = PD_control_deg(diff_deg)
-            print("Turn left")
+            print("Forward")
+
+        elif -180.0 <= diff_deg < -135.0 or 135.0 <= diff_deg < 180.0:
+            ch = 5
+            pwm = 3000 - pwm
+            print("Backward")
+
+        elif 45.0 <= diff_deg < 135.0:
+            ch = 6
+            print("Right")
+
+        elif -135.0 <= diff_deg < -45.0:
+            ch = 6
+            pwm = 3000 - pwm
+            print("Left")
+
         action = [ch, pwm]
         print("pwm: ", pwm)
 
-        print("diff: ", diff_deg)
+        print("diff deg: ", diff_deg)
+        print("diff distance: ", diff_distance)
+
     return action
 
-def PD_control_dis(distance):
+def P_control(distance):
     MAX_PULSE = const.MAX_PULSE
-    MIN_PULSE = const.MIN_PULSE
     Kp = const.distance_Kp
-    Kd = const.distance_Kd
-    
-    diff_e = e_dis[len(e_dis)-2]-e_dis[len(e_dis)-1]
 
-    t_out = int(1500 + Kp * distance + Kd * diff_e)
+    t_out = int(1500 + Kp * distance)
 
-    if t_out < MIN_PWM:
-        t_out = MIN_PWM
-    elif t_out > MAX_PWM:
-        t_out = MAX_PWM
-    t_out = 1700
-    return t_out
-
-def PD_control_deg(diff_deg):
-    MAX_PULSE = const.MAX_PULSE
-    MIN_PULSE = const.MIN_PULSE
-    Kp = const.degree_Kp
-    Kd = const.degree_Kd
-
-    diff_e = e_deg[len(e_deg)-2]-e_deg[len(e_deg)-1]
-    inv = 1
-    t_out = int(1500 + inv * (Kp * diff_deg + Kd * diff_e))
-    BIWAKO.servo = t_out
-
-    if t_out < MIN_PULSE:
-        t_out = MIN_PULSE
-    elif t_out > MAX_PULSE:
+    if t_out > MAX_PUlSE:
         t_out = MAX_PULSE
 
-    t_out = 3000 - t_out
     return t_out
 
 def kill_signal_process(arg1, args2):
