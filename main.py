@@ -1,0 +1,273 @@
+# import library
+import time
+import mpu
+import csv
+import datetime
+import json
+import math
+import signal
+import threading
+
+import numpy as np
+from pymavlink import mavutil
+from geopy.distance import geodesic
+from robot import Robot
+from wt_sensor_class import WT_sensor
+import calculate_degree as calculator
+
+# read waypoint file (csv)
+way_point_file = './way_point/maiami2.csv'
+way_point = np.genfromtxt(way_point_file,
+                          delimiter=',',
+                          dtype='float',
+                          encoding='utf-8')
+
+# connect to the robot
+master = mavutil.mavlink_connection('udp:127.0.0.01:14551')
+
+# wait heart beat
+master.wait_heartbeat()
+
+# Request all parameters
+master.mav.param_request_list_send(
+    master.target_system, master.target_component
+)
+
+# set robot mode to manual and armable
+def set_mode(mode):
+    # Get mode ID: return value should be 1 for acro mode
+    mode_id = master.mode_mapping()[mode]
+    # Set new mode
+    master.mav.set_mode_send(
+    master.target_system,
+    mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+    mode_id)
+
+def set_arm_disarm(msg):
+    if(msg=='ARM'):
+        cmd = 1
+    elif(msg=='DISARM'):
+        cmd = 0
+    ############################################################## Arm
+    master.mav.command_long_send(master.target_system, 
+    master.target_component,
+    mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
+    cmd,
+    1, 0, 0, 0, 0, 0, 0)
+
+# update the robot state
+def update_robot_state():
+    GPS_message = master.recv_match(type='GLOBAL_POSITION_INT', blocking=True).to_dict()
+    attitude_message = master.recv_match(type='ATTITUDE', blocking=True).to_dict()
+    lon = float(GPS_message['lon'])/10**7
+    lat = float(GPS_message['lat'])/10**7
+    yaw = float(attitude_message['yaw'])
+
+    BIWAKO.lon = lon
+    BIWAKO.lat = lat
+    BIWAKO.yaw = yaw
+
+# calculate heading difference between current point to target point
+def calc_heading_diff(way_point):
+    t_lon = math.radians(way_point[0])
+    t_lat = math.radians(way_point[1])
+    c_lon = math.radians(BIWAKO.lon)
+    c_lat = math.radians(BIWAKO.lat)
+    d_lon = c_lon - t_lon
+    
+    diff_heading = 90 - math.degree(math.atan2(math.cos(t_lat)*math.sin(c_lat)
+                  - math.sin(t_lat)*math.cos(c_lat)*math.cos(d_lon), math.sin(d_lon)*math.cos(c_lat)))
+    return diff_heading
+
+def decide_next_action(pose, distace_tolerance, heading_torelance):
+    # decide the next action from current robot status and the next waypoint
+    current_point = np.array([pose[1], pose[0]])
+    current_yaw = pose[2]
+      
+    diff_distance = round(mpu.haversine_distance(current_point, BIWAKO.next_goal), 5)*1000
+    e_dis.append(diff_distance)
+    # check distance between current and target
+    if abs(diff_distance) < distace_tolerance:
+        ch = 4
+        pwm = 1500
+        action = [ch, pwm]
+        print("achieve the target point")
+        print("########################")
+        print("########################")
+        if BIWAKO.way_point_num != -1:
+            BIWAKO.update_next_goal()
+            print("change waypoint")
+            print("next way point: ", BIWAKO.next_goal)
+        elif BIWAKO.way_point_num == -1:
+            ch = 4
+            pwm = 1500
+            action = [ch, pwm]
+            print("Mission complete")
+        else:
+            ch = 4
+            pwm = 1500
+            action = [ch, pwm]
+            print("Way point error")
+        return action
+    # when the device has not received
+    else:
+        target_direction = math.radians(calculator.calculate_bearing(current_point, BIWAKO.next_goal))
+        diff_deg =  math.degrees(calculator.limit_angle(target_direction - current_yaw))
+        e_deg.append(diff_deg)
+        if abs(diff_deg) < heading_torelance:
+            ch = 5
+            pwm = PD_control_dis(diff_distance)
+            print("Straight")
+        elif diff_deg >= heading_torelance:
+            ch = 4
+            pwm = PD_control_deg(diff_deg)
+            print("Turn right")
+        elif diff_deg < -1.0 * heading_torelance:
+            ch = 4
+            pwm = PD_control_deg(diff_deg)
+            print("Turn left")
+        action = [ch, pwm]
+        print("diff: ", diff_deg)
+    return action
+
+# control thrusters
+def control_thruster(action, ch=0, pwm=1500):
+    ch = action[0]
+    pwm = action[1]
+    if ch < 1:
+        print("Channel does not exist.")
+    if ch < 9:
+        rc_channel_values = [65535 for _ in range(8)]
+        rc_channel_values[ch - 1] = pwm
+        master.mav.rc_channels_override_send(
+            master.target_system,                # target_system
+            master.target_component,             # target_component
+            *rc_channel_values)                  # RC channel list, in microseconds.
+
+def PD_control_dis(distance):
+    MAX_PWM = 1662
+    MIN_PWM = 1362
+    Kp = 3
+    Kd = 1.5
+    diff_e = e_dis[len(e_dis)-2]-e_dis[len(e_dis)-1]
+
+    t_out = int(1500 + Kp * distance + Kd * diff_e)
+
+    if t_out < MIN_PWM:
+        t_out = MIN_PWM
+    elif t_out > MAX_PWM:
+        t_out = MAX_PWM
+    return t_out
+
+def PD_control_deg(diff_deg):
+    Kp = 2.6
+    Kd = 0.8
+
+    MAX_PULSE = 1662
+    MIN_PULSE = 1362
+    offset = -15
+
+    diff_e = e_deg[len(e_deg)-2]-e_deg[len(e_deg)-1]
+    inv = 1
+    t_out = int(1512 + offset + inv * (Kp * diff_deg + Kd * diff_e))
+    BIWAKO.servo = t_out
+
+    if t_out < MIN_PULSE:
+        t_out = MIN_PULSE
+    elif t_out > MAX_PULSE:
+        t_out = MAX_PULSE
+    return t_out
+
+def kill_signal_process(arg1, args2):
+	pass
+    # wt_thread.stop()
+
+def logging(arg1, args2):
+    update_robot_state()
+    wt = Sensor.wt
+    unix_time = time.time()
+    BIWAKO.count = BIWAKO.count + 0.1
+    data = [unix_time, BIWAKO.count, BIWAKO.lat, BIWAKO.lon, math.degrees(BIWAKO.yaw), BIWAKO.cmd, BIWAKO.pwm, wt]
+    log_data.append(data)
+
+def update_wt():
+    while True:
+        Sensor.wt = Sensor.observation()
+
+###############################################################################
+# Initialize the robot
+set_mode('MANUAL')
+print("Set mode to Manual")
+initial_action = [4, 1500]
+print('Initialize...')
+print('Wait seven second...')
+control_thruster(initial_action)
+time.sleep(7)
+master.arducopter_arm()
+print("Arm/Disarm: Arm")
+
+BIWAKO = Robot(way_point)
+Sensor = WT_sensor()
+update_wt_thread = threading.Thread(target=update_wt)
+update_wt_thread.start()
+
+log_data = []
+e_deg = [0]
+e_dis = [0]
+###############################################################################
+
+if __name__ == '__main__':
+    # import and read comfig file
+    params_file = open("params.json", "r")
+    params = json.load(params_file)
+    
+    state_data_log = params["Config"]["state_data_log"]
+    debug_mode = params["Config"]["debug_mode"]
+    
+    distance_torelance = params["Controller"]["distance_torelance"]
+    heading_torelance = params["Controller"]["heading_torelance"]
+    
+    if (state_data_log==True):
+        # get date time object
+        detail = datetime.datetime.now()
+        date = detail.strftime("%Y%m%d%H%M%S")
+        # open csv file
+        file = open('./csv/'+ date +'.csv', 'a', newline='')
+        csvWriter = csv.writer(file)
+        csvWriter.writerow(['time', 'count', 'latitude', 'longitude', 'yaw', 'cmd', 'pwm', 'wt'])
+        # csvWriter.writerow(['latitude', 'longitude', 'yaw', 'cmd', 'pwm'])
+    try:
+        signal.signal(signal.SIGALRM, logging)
+        signal.setitimer(signal.ITIMER_REAL, 0.5, 0.5)
+        while True:
+            pose = [BIWAKO.lon, BIWAKO.lat, BIWAKO.yaw]
+            action = decide_next_action(pose, distance_torelance, heading_torelance)
+            BIWAKO.cmd = action[0]
+            BIWAKO.pwm = action[1]
+            if BIWAKO.way_point_num == -1:
+                break
+            control_thruster(action)
+            time.sleep(0.02)
+
+        if (state_data_log==True):
+            for i in range(len(log_data)):
+                csvWriter.writerow(log_data[i])
+            file.close()
+
+        update_wt_thread.join()
+        master.arducopter_disarm()
+        print("Arm/Disarm: Disarm")
+        signal.signal(signal.SIGALRM, kill_signal_process)
+        signal.setitimer(signal.ITIMER_REAL, 1, 0.5)
+
+    except KeyboardInterrupt:
+        if (state_data_log==True):
+            for i in range(len(log_data)):
+                csvWriter.writerow(log_data[i])
+            file.close()
+        update_wt_thread.join()
+        master.arducopter_disarm()
+        print("Arm/Disarm: Disarm")
+        time.sleep(3)
+        signal.signal(signal.SIGALRM, kill_signal_process)
+        signal.setitimer(signal.ITIMER_REAL, 1, 0.5)
