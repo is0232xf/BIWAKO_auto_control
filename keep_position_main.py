@@ -158,11 +158,10 @@ def PD_control_deg(diff_deg):
 
     MAX_PULSE = 1662
     MIN_PULSE = 1362
-    offset = -15
 
     diff_e = e_deg[len(e_deg)-2]-e_deg[len(e_deg)-1]
     inv = 1
-    t_out = int(1512 + offset + inv * (Kp * diff_deg + Kd * diff_e))
+    t_out = int(1500 + inv * (Kp * diff_deg + Kd * diff_e))
     BIWAKO.servo = t_out
 
     if t_out < MIN_PULSE:
