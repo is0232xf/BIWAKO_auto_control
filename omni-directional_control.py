@@ -243,6 +243,12 @@ if __name__ == '__main__':
             else:
                 BIWAKO.temp_goal = calc_temp_target(current_point, BIWAKO.next_goal)
                 while True:
+                    pose = [BIWAKO.lon, BIWAKO.lat, BIWAKO.yaw]
+                    # decide the next action from current robot status and the next waypoint
+                    current_point = np.array([pose[1], pose[0]])
+                    current_yaw = pose[2]
+                      
+                    diff_distance = round(mpu.haversine_distance(current_point, BIWAKO.temp_goal), 5)*1000
                     target_direction = math.radians(calculator.calculate_bearing(current_point, BIWAKO.temp_goal))
                     diff_deg =  math.degrees(calculator.limit_angle(target_direction - current_yaw))
                     action = omni_control_action(diff_deg, diff_distance)
