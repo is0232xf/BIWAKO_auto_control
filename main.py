@@ -130,6 +130,53 @@ def decide_next_action(pose, distace_tolerance, heading_torelance):
         print("diff: ", diff_deg)
     return action
 
+def decide_next_action_omni(pose, distace_tolerance, heading_torelance):
+    # decide the next action from current robot status and the next waypoint
+    current_point = np.array([pose[1], pose[0]])
+    current_yaw = pose[2]
+      
+    diff_distance = round(mpu.haversine_distance(current_point, BIWAKO.next_goal), 5)*1000
+    e_dis.append(diff_distance)
+    # check distance between current and target
+    if abs(diff_distance) < distace_tolerance:
+        ch = 4
+        pwm = 1500
+        action = [ch, pwm]
+        print("Achive the point")
+        print("########################")
+        return action
+    # when the device has not received
+    else:
+        target_direction = math.radians(calculator.calculate_bearing(current_point, BIWAKO.next_goal))
+        diff_deg =  math.degrees(calculator.limit_angle(target_direction - current_yaw))
+        e_deg.append(diff_deg)
+
+        pwm = P_control(diff_distance)
+        if -45.0 <= diff_deg < 45:
+            ch = 5
+            print("Forward")
+
+        elif -180.0 <= diff_deg < -135.0 or 135.0 <= diff_deg < 180.0:
+            ch = 5
+            pwm = 3000 - pwm
+            print("Backward")
+
+        elif 45.0 <= diff_deg < 135.0:
+            ch = 6
+            print("Right")
+
+        elif -135.0 <= diff_deg < -45.0:
+            ch = 6
+            pwm = 3000 - pwm
+            print("Left")
+
+        action = [ch, pwm]
+        print("pwm: ", pwm)
+
+        print("diff deg: ", diff_deg)
+        print("diff distance: ", diff_distance)
+
+    return action
 # control thrusters
 def control_thruster(action, ch=0, pwm=1500):
     ch = action[0]
@@ -143,6 +190,17 @@ def control_thruster(action, ch=0, pwm=1500):
             master.target_system,                # target_system
             master.target_component,             # target_component
             *rc_channel_values)                  # RC channel list, in microseconds.
+
+def P_control(distance):
+    MAX_PULSE = const.MAX_PULSE
+    Kp = const.distance_Kp
+
+    t_out = int(1500 + Kp * distance)
+
+    if t_out > MAX_PUlSE:
+        t_out = MAX_PULSE
+
+    return t_out
 
 def PD_control_dis(distance):
     MAX_PULSE = const.MAX_PULSE
