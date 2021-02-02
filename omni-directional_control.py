@@ -99,51 +99,14 @@ def decide_next_action(pose, start_time, distace_tolerance, heading_torelance):
     current_yaw = pose[2]
       
     diff_distance = round(mpu.haversine_distance(current_point, BIWAKO.next_goal), 5)*1000
-    e_dis.append(diff_distance)
     # check distance between current and target
     if abs(diff_distance) < distace_tolerance:
-        ch = 4
-        pwm = 1500
-        action = [ch, pwm]
-        isKeep_position = True
-	    
-        if start_time == 0.0:
-            start_time = time.time()
-        print("Keep the position")
-        print("########################")
-        return action
+        action = stay_action()
     # when the device has not received
     else:
-        isKeep_position = True
         target_direction = math.radians(calculator.calculate_bearing(current_point, BIWAKO.next_goal))
         diff_deg =  math.degrees(calculator.limit_angle(target_direction - current_yaw))
-        e_deg.append(diff_deg)
-
-        pwm = P_control(diff_distance)
-        if -45.0 <= diff_deg < 45:
-            ch = 5
-            print("Forward")
-
-        elif -180.0 <= diff_deg < -135.0 or 135.0 <= diff_deg < 180.0:
-            ch = 5
-            pwm = 3000 - pwm
-            print("Backward")
-
-        elif 45.0 <= diff_deg < 135.0:
-            ch = 6
-            print("Right")
-
-        elif -135.0 <= diff_deg < -45.0:
-            ch = 6
-            pwm = 3000 - pwm
-            print("Left")
-
-        action = [ch, pwm]
-        print("pwm: ", pwm)
-
-        print("diff deg: ", diff_deg)
-        print("diff distance: ", diff_distance)
-
+        action = omni_control_action()
     return action
 
 def P_control(distance):
@@ -175,6 +138,42 @@ def calc_temp_target(current_point, target_point):
     temp_target = [temp_target[0], temp_target[1]]
     return temp_target
 
+def omni_control_action(diff_deg, diff_distance):
+    pwm = P_control(diff_distance)
+    if -45.0 <= diff_deg < 45:
+        ch = 5
+        print("Forward")
+
+    elif -180.0 <= diff_deg < -135.0 or 135.0 <= diff_deg < 180.0:
+        ch = 5
+        pwm = 3000 - pwm
+        print("Backward")
+
+    elif 45.0 <= diff_deg < 135.0:
+        ch = 6
+        print("Right")
+
+    elif -135.0 <= diff_deg < -45.0:
+        ch = 6
+        pwm = 3000 - pwm
+        print("Left")
+
+    action = [ch, pwm]
+    print("pwm: ", pwm)
+
+    print("diff deg: ", diff_deg)
+    print("diff distance: ", diff_distance)
+    return action
+
+def stay_action():
+    ch = 4
+    pwm = 1500
+    action = [ch, pwm]
+    
+    print("Keep the position")
+    print("########################")
+    return action
+
 def update_wt():
     while True:
         Sensor.wt = Sensor.observation()
@@ -199,10 +198,7 @@ update_wt_thread = threading.Thread(target=update_wt)
 update_wt_thread.start()
 
 log_data = []
-e_deg = [0]
-e_dis = [0]
 
-isKeep_position = False
 ############ start to measure the second ############    
 start_time = 0.0
 
@@ -231,18 +227,32 @@ if __name__ == '__main__':
         signal.setitimer(signal.ITIMER_REAL, 0.5, 0.5)
         while True:
             pose = [BIWAKO.lon, BIWAKO.lat, BIWAKO.yaw]
-            action = decide_next_action(pose, start_time, distance_torelance, heading_torelance)
-            BIWAKO.cmd = action[0]
-            BIWAKO.pwm = action[1]
+            # decide the next action from current robot status and the next waypoint
+            current_point = np.array([pose[1], pose[0]])
+            current_yaw = pose[2]
+              
+            diff_distance = round(mpu.haversine_distance(current_point, BIWAKO.next_goal), 5)*1000
 
-            control_thruster(action)
-            
-            if isKeep_position == True:
-	              elapsed_time = time.time() - start_time
-	              if elapsed_time > keep_time:
-  	                break
+            if abs(diff_distance) < distace_tolerance:
+                action = stay_action()
+                BIWAKO.cmd = action[0]
+                BIWAKO.pwm = action[1]
+                control_thruster(action)
+                time.sleep(0.02)
 
-            time.sleep(0.02)
+            else:
+                BIWAKO.temp_goal = calc_temp_target(current_point, BIWAKO.next_goal)
+                while True:
+                    target_direction = math.radians(calculator.calculate_bearing(current_point, BIWAKO.temp_goal))
+                    diff_deg =  math.degrees(calculator.limit_angle(target_direction - current_yaw))
+                    action = omni_control_action(diff_deg, diff_distance)
+                    BIWAKO.cmd = action[0]
+                    BIWAKO.pwm = action[1]
+                    control_thruster(action)
+                    time.sleep(0.02)
+                    if abs(diff_distance) < distace_tolerance:
+                        break
+
 
         if (state_data_log==True):
             for i in range(len(log_data)):

@@ -12,6 +12,7 @@ class Robot:
 		self.pwm = 1500
 		self.cmd = 0 # 0:Straight, 1:Turn right, 2:Turn left
 		self.count = 0
+		self.temp_goal = [0.0, 0.0]
         
 	def update_next_goal(self):
 		if self.way_point_num < len(self.way_point)-1:
