@@ -168,6 +168,13 @@ def logging(arg1, args2):
     data = [unix_time, BIWAKO.count, BIWAKO.lat, BIWAKO.lon, math.degrees(BIWAKO.yaw), BIWAKO.cmd, BIWAKO.pwm, wt]
     log_data.append(data)
 
+def calc_temp_target(current_point, target_point):
+    current_point = np.array([current_point])
+    target_point = np.array([target_point])
+    temp_target = target_point-(current_point-target_point)/2
+    temp_target = [temp_target[0], temp_target[1]]
+    return temp_target
+
 def update_wt():
     while True:
         Sensor.wt = Sensor.observation()
