@@ -14,6 +14,7 @@ from geopy.distance import geodesic
 from robot import Robot
 from wt_sensor_class import WT_sensor
 import calculate_degree as calculator
+from ina226 import INA226
 
 # read waypoint file (csv)
 target_point_file = './way_point/maiami_target.csv'
@@ -49,7 +50,7 @@ def set_arm_disarm(msg):
     elif(msg=='DISARM'):
         cmd = 0
     ############################################################## Arm
-    master.mav.command_long_send(master.target_system, 
+    master.mav.command_long_send(master.target_system,
     master.target_component,
     mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
     cmd,
@@ -88,7 +89,7 @@ def calc_heading_diff(way_point):
     c_lon = math.radians(BIWAKO.lon)
     c_lat = math.radians(BIWAKO.lat)
     d_lon = c_lon - t_lon
-    
+
     diff_heading = 90 - math.degree(math.atan2(math.cos(t_lat)*math.sin(c_lat)
                   - math.sin(t_lat)*math.cos(c_lat)*math.cos(d_lon), math.sin(d_lon)*math.cos(c_lat)))
     return diff_heading
@@ -97,7 +98,7 @@ def decide_next_action(pose, start_time, distace_tolerance, heading_torelance):
     # decide the next action from current robot status and the next waypoint
     current_point = np.array([pose[1], pose[0]])
     current_yaw = pose[2]
-      
+
     diff_distance = round(mpu.haversine_distance(current_point, BIWAKO.next_goal), 5)*1000
     # check distance between current and target
     if abs(diff_distance) < distace_tolerance:
@@ -125,10 +126,14 @@ def kill_signal_process(arg1, args2):
 
 def logging(arg1, args2):
     update_robot_state()
-    wt = Sensor.wt
+    wt = wt_sensor.wt
+    v = round(power_sensor.get_voltage())
+    c = round(power_sensor.get_current())
+    p = round(power_sensor.get_power())
     unix_time = time.time()
     BIWAKO.count = BIWAKO.count + 0.1
-    data = [unix_time, BIWAKO.count, BIWAKO.lat, BIWAKO.lon, math.degrees(BIWAKO.yaw), BIWAKO.cmd, BIWAKO.pwm, wt]
+    data = [unix_time, BIWAKO.count, BIWAKO.lat, BIWAKO.lon, math.degrees(BIWAKO.yaw),
+            BIWAKO.cmd, BIWAKO.pwm, wt, v, c, p]
     log_data.append(data)
 
 def calc_temp_target(current_point, target_point):
@@ -169,14 +174,14 @@ def stay_action():
     ch = 4
     pwm = 1500
     action = [ch, pwm]
-    
+
     print("Keep the position")
     print("########################")
     return action
 
 def update_wt():
     while True:
-        Sensor.wt = Sensor.observation()
+        wt_sensor.wt = wt_sensor.observation()
 
 ###############################################################################
 # Initialize the robot
@@ -191,28 +196,30 @@ master.arducopter_arm()
 print("Arm/Disarm: Arm")
 
 BIWAKO = Robot(target_point)
-Sensor = WT_sensor()
+wt_sensor = WT_sensor()
+power_sensor = INA226(False)
 const = parameter()
+
 
 update_wt_thread = threading.Thread(target=update_wt)
 update_wt_thread.start()
 
 log_data = []
 
-############ start to measure the second ############    
+############ start to measure the second ############
 start_time = 0.0
 
 if __name__ == '__main__':
-    
+
     state_data_log = const.data_log_mode
     debug_mode = const.debug_mode
-    
+
     distance_torelance = const.distance_torelance
     heading_torelance = const.heading_torelance
     keep_time = const.duration
 
     print("duration: ", keep_time )
-    
+
     if (state_data_log==True):
         # get date time object
         detail = datetime.datetime.now()
@@ -220,7 +227,8 @@ if __name__ == '__main__':
         # open csv file
         file = open('./csv/'+ date +'.csv', 'a', newline='')
         csvWriter = csv.writer(file)
-        csvWriter.writerow(['time', 'count', 'latitude', 'longitude', 'yaw', 'cmd', 'pwm', 'wt'])
+        csvWriter.writerow(['time', 'count', 'latitude', 'longitude', 'yaw', 'cmd',
+                            'pwm', 'wt', 'voltage', 'current', 'power_consumption'])
 
     try:
         signal.signal(signal.SIGALRM, logging)
@@ -230,7 +238,7 @@ if __name__ == '__main__':
             # decide the next action from current robot status and the next waypoint
             current_point = np.array([pose[1], pose[0]])
             current_yaw = pose[2]
-              
+
             diff_distance = round(mpu.haversine_distance(current_point, BIWAKO.next_goal), 5)*1000
 
             if abs(diff_distance) < distace_tolerance:
@@ -247,7 +255,7 @@ if __name__ == '__main__':
                     # decide the next action from current robot status and the next waypoint
                     current_point = np.array([pose[1], pose[0]])
                     current_yaw = pose[2]
-                      
+
                     diff_distance = round(mpu.haversine_distance(current_point, BIWAKO.temp_goal), 5)*1000
                     target_direction = math.radians(calculator.calculate_bearing(current_point, BIWAKO.temp_goal))
                     diff_deg =  math.degrees(calculator.limit_angle(target_direction - current_yaw))
@@ -264,7 +272,7 @@ if __name__ == '__main__':
             for i in range(len(log_data)):
                 csvWriter.writerow(log_data[i])
             file.close()
-        
+
         update_wt_thread.join()
         master.arducopter_disarm()
         print("Arm/Disarm: Disarm")
@@ -276,7 +284,7 @@ if __name__ == '__main__':
             for i in range(len(log_data)):
                 csvWriter.writerow(log_data[i])
             file.close()
-        
+
         update_wt_thread.join()
         master.arducopter_disarm()
         print("Arm/Disarm: Disarm")
