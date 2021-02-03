@@ -14,6 +14,7 @@ class parameter:
 		self.debug_mode = True
 
 		# OTHER
-		self.distance_torelance = 3.0
+		self.main_target_distance_torelance = 3.0
+		self.temp_target_distance_torelance = 1.0
 		self.heading_torelance = 15.0
 		self.duration = 10.0

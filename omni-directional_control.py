@@ -214,7 +214,8 @@ if __name__ == '__main__':
     state_data_log = const.data_log_mode
     debug_mode = const.debug_mode
 
-    distance_torelance = const.distance_torelance
+    main_target_distance_torelance = const.main_target_distance_torelance
+    temp_target_distance_torelance = const.temp_target_distance_torelance
     heading_torelance = const.heading_torelance
     keep_time = const.duration
 
@@ -241,7 +242,7 @@ if __name__ == '__main__':
 
             diff_distance = round(mpu.haversine_distance(current_point, BIWAKO.next_goal), 5)*1000
 
-            if abs(diff_distance) < distace_tolerance:
+            if abs(diff_distance) < maiami_target_distance_tolerance:
                 action = stay_action()
                 BIWAKO.cmd = action[0]
                 BIWAKO.pwm = action[1]
@@ -264,7 +265,7 @@ if __name__ == '__main__':
                     BIWAKO.pwm = action[1]
                     control_thruster(action)
                     time.sleep(0.02)
-                    if abs(diff_distance) < distace_tolerance:
+                    if abs(diff_distance) < temp_target_distance_torelance:
                         break
 
 
