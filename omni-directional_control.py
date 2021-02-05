@@ -16,6 +16,8 @@ from wt_sensor_class import WT_sensor
 import calculate_degree as calculator
 from INA226 import INA226
 
+const = parameter()
+
 # read waypoint file (csv)
 target_point_file = const.way_point_file
 target_point = np.genfromtxt(target_point_file,
@@ -127,9 +129,9 @@ def kill_signal_process(arg1, args2):
 def logging(arg1, args2):
     update_robot_state()
     wt = wt_sensor.wt
-    v = round(power_sensor.get_voltage(), 2)
-    c = round(power_sensor.get_current(), 2)
-    p = round(power_sensor.get_power(), 2)
+    v = power_sensor.get_voltage()
+    c = power_sensor.get_current()
+    p = power_sensor.get_power()
     unix_time = time.time()
     BIWAKO.count = BIWAKO.count + 0.1
     data = [unix_time, BIWAKO.count, BIWAKO.lat, BIWAKO.lon, math.degrees(BIWAKO.yaw),
@@ -200,7 +202,6 @@ wt_sensor = WT_sensor()
 addr = 0x40
 power_sensor = INA226(addr)
 power_sensor.initial_operation()
-const = parameter()
 
 update_wt_thread = threading.Thread(target=update_wt)
 update_wt_thread.start()
