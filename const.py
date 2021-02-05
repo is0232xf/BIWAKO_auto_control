@@ -9,6 +9,8 @@ class parameter:
 		self.MAX_PULSE = 1662
 		self.MIN_PULSE= 1362
 
+		# WAY point
+		self.way_point_file = './way_point/test.csv'
 		# MODE
 		self.data_log_mode = True
 		self.debug_mode = True
