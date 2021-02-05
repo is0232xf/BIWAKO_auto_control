@@ -127,9 +127,9 @@ def kill_signal_process(arg1, args2):
 def logging(arg1, args2):
     update_robot_state()
     wt = wt_sensor.wt
-    v = round(power_sensor.get_voltage())
-    c = round(power_sensor.get_current())
-    p = round(power_sensor.get_power())
+    v = round(power_sensor.get_voltage(), 2)
+    c = round(power_sensor.get_current(), 2)
+    p = round(power_sensor.get_power(), 2)
     unix_time = time.time()
     BIWAKO.count = BIWAKO.count + 0.1
     data = [unix_time, BIWAKO.count, BIWAKO.lat, BIWAKO.lon, math.degrees(BIWAKO.yaw),
@@ -199,6 +199,7 @@ BIWAKO = Robot(target_point)
 wt_sensor = WT_sensor()
 addr = 0x40
 power_sensor = INA226(addr)
+power_sensor.initial_operation()
 const = parameter()
 
 update_wt_thread = threading.Thread(target=update_wt)
