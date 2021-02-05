@@ -17,7 +17,7 @@ import calculate_degree as calculator
 from INA226 import INA226
 
 # read waypoint file (csv)
-target_point_file = './way_point/maiami_target.csv'
+target_point_file = const.way_point_file
 target_point = np.genfromtxt(target_point_file,
                           delimiter=',',
                           dtype='float',
@@ -116,7 +116,7 @@ def P_control(distance):
 
     t_out = int(1500 + Kp * distance)
 
-    if t_out > MAX_PUlSE:
+    if t_out > MAX_PULSE:
         t_out = MAX_PULSE
 
     return t_out
@@ -140,7 +140,7 @@ def calc_temp_target(current_point, target_point):
     current_point = np.array([current_point])
     target_point = np.array([target_point])
     temp_target = target_point-(current_point-target_point)/2
-    temp_target = [temp_target[0], temp_target[1]]
+    temp_target = [temp_target[0][0], temp_target[0][1]]
     return temp_target
 
 def omni_control_action(diff_deg, diff_distance):
@@ -219,8 +219,6 @@ if __name__ == '__main__':
     heading_torelance = const.heading_torelance
     keep_time = const.duration
 
-    print("duration: ", keep_time )
-
     if (state_data_log==True):
         # get date time object
         detail = datetime.datetime.now()
@@ -239,10 +237,9 @@ if __name__ == '__main__':
             # decide the next action from current robot status and the next waypoint
             current_point = np.array([pose[1], pose[0]])
             current_yaw = pose[2]
-
             diff_distance = round(mpu.haversine_distance(current_point, BIWAKO.next_goal), 5)*1000
 
-            if abs(diff_distance) < maiami_target_distance_tolerance:
+            if abs(diff_distance) < main_target_distance_torelance:
                 action = stay_action()
                 BIWAKO.cmd = action[0]
                 BIWAKO.pwm = action[1]
@@ -252,11 +249,12 @@ if __name__ == '__main__':
             else:
                 BIWAKO.temp_goal = calc_temp_target(current_point, BIWAKO.next_goal)
                 while True:
-                    pose = [BIWAKO.lon, BIWAKO.lat, BIWAKO.yaw]
+                    pose = [BIWAKO.lat, BIWAKO.lon, BIWAKO.yaw]
                     # decide the next action from current robot status and the next waypoint
-                    current_point = np.array([pose[1], pose[0]])
+                    current_point = np.array([pose[0], pose[1]])
                     current_yaw = pose[2]
 
+                    # location input format: [latitude, longotude]
                     diff_distance = round(mpu.haversine_distance(current_point, BIWAKO.temp_goal), 5)*1000
                     target_direction = math.radians(calculator.calculate_bearing(current_point, BIWAKO.temp_goal))
                     diff_deg =  math.degrees(calculator.limit_angle(target_direction - current_yaw))
