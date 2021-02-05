@@ -14,7 +14,7 @@ from geopy.distance import geodesic
 from robot import Robot
 from wt_sensor_class import WT_sensor
 import calculate_degree as calculator
-from ina226 import INA226
+from INA226 import INA226
 
 # read waypoint file (csv)
 target_point_file = './way_point/maiami_target.csv'
@@ -197,9 +197,9 @@ print("Arm/Disarm: Arm")
 
 BIWAKO = Robot(target_point)
 wt_sensor = WT_sensor()
-power_sensor = INA226(False)
+addr = 0x40
+power_sensor = INA226(addr)
 const = parameter()
-
 
 update_wt_thread = threading.Thread(target=update_wt)
 update_wt_thread.start()
