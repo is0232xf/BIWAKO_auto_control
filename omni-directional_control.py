@@ -14,6 +14,7 @@ from geopy.distance import geodesic
 from robot import Robot
 from wt_sensor_class import WT_sensor
 import calculate_degree as calculator
+import robot_control_action as actions
 from INA226 import INA226
 
 const = parameter()
@@ -104,24 +105,13 @@ def decide_next_action(pose, start_time, distace_tolerance, heading_torelance):
     diff_distance = round(mpu.haversine_distance(current_point, BIWAKO.next_goal), 5)*1000
     # check distance between current and target
     if abs(diff_distance) < distace_tolerance:
-        action = stay_action()
+        action = actions.stay_action()
     # when the device has not received
     else:
         target_direction = math.radians(calculator.calculate_bearing(current_point, BIWAKO.next_goal))
         diff_deg =  math.degrees(calculator.limit_angle(target_direction - current_yaw))
-        action = omni_control_action(diff_deg, diff_distance)
+        action = actions.omni_control_action(diff_deg, diff_distance)
     return action
-
-def P_control(distance):
-    MAX_PULSE = const.MAX_PULSE
-    Kp = const.distance_Kp
-
-    t_out = int(1500 + Kp * distance)
-
-    if t_out > MAX_PULSE:
-        t_out = MAX_PULSE
-
-    return t_out
 
 def kill_signal_process(arg1, args2):
     pass
@@ -144,42 +134,6 @@ def calc_temp_target(current_point, target_point):
     temp_target = target_point-(current_point-target_point)/2
     temp_target = [temp_target[0][0], temp_target[0][1]]
     return temp_target
-
-def omni_control_action(diff_deg, diff_distance):
-    pwm = P_control(diff_distance)
-    if -45.0 <= diff_deg < 45:
-        ch = 5
-        print("Forward")
-
-    elif -180.0 <= diff_deg < -135.0 or 135.0 <= diff_deg < 180.0:
-        ch = 5
-        pwm = 3000 - pwm
-        print("Backward")
-
-    elif 45.0 <= diff_deg < 135.0:
-        ch = 6
-        print("Right")
-
-    elif -135.0 <= diff_deg < -45.0:
-        ch = 6
-        pwm = 3000 - pwm
-        print("Left")
-
-    action = [ch, pwm]
-    print("pwm: ", pwm)
-
-    print("diff deg: ", diff_deg)
-    print("diff distance: ", diff_distance)
-    return action
-
-def stay_action():
-    ch = 4
-    pwm = 1500
-    action = [ch, pwm]
-
-    print("Keep the position")
-    print("########################")
-    return action
 
 def update_wt():
     while True:
@@ -242,7 +196,7 @@ if __name__ == '__main__':
             diff_distance = round(mpu.haversine_distance(current_point, BIWAKO.next_goal), 5)*1000
 
             if abs(diff_distance) < main_target_distance_torelance:
-                action = stay_action()
+                action = actions.stay_action()
                 BIWAKO.cmd = action[0]
                 BIWAKO.pwm = action[1]
                 control_thruster(action)
@@ -260,14 +214,14 @@ if __name__ == '__main__':
                     diff_distance = round(mpu.haversine_distance(current_point, BIWAKO.temp_goal), 5)*1000
                     target_direction = math.radians(calculator.calculate_bearing(current_point, BIWAKO.temp_goal))
                     diff_deg =  math.degrees(calculator.limit_angle(target_direction - current_yaw))
-                    action = omni_control_action(diff_deg, diff_distance)
+                    action = actions.omni_control_action(diff_deg, diff_distance)
                     BIWAKO.cmd = action[0]
                     BIWAKO.pwm = action[1]
                     control_thruster(action)
                     time.sleep(0.02)
+
                     if abs(diff_distance) < temp_target_distance_torelance:
                         break
-
 
         if (state_data_log==True):
             for i in range(len(log_data)):
