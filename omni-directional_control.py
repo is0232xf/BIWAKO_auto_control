@@ -26,7 +26,7 @@ target_point = np.genfromtxt(target_point_file,
                           encoding='utf-8')
 
 # connect to the robot
-master = mavutil.mavlink_connection('udp:127.0.0.01:14551')
+master = mavutil.mavlink_connection('udp:127.0.0.1:14551')
 
 # wait heart beat
 master.wait_heartbeat()
@@ -109,7 +109,7 @@ def decide_next_action(pose, start_time, distace_tolerance, heading_torelance):
     else:
         target_direction = math.radians(calculator.calculate_bearing(current_point, BIWAKO.next_goal))
         diff_deg =  math.degrees(calculator.limit_angle(target_direction - current_yaw))
-        action = omni_control_action()
+        action = omni_control_action(diff_deg, diff_distance)
     return action
 
 def P_control(distance):
