@@ -14,12 +14,16 @@ class parameter:
 
 		# MODE
 		self.data_log_mode = True
-		self.debug_mode = False
+		self.debug_mode = True
 		self.wt_log_mode = False
 
-		#CONTROL MODE
+		# CONTROL MODE
 		self.control_mode = 0
 		# 0:OMNICONTROL MODE, 1:DIAGNALCONTROL MODE
+
+		# CONTROL STRATEGY
+		self.strategy = 0
+		# 0:SIMPLE STRATEGY, 1:FLEX STRATEGY
 
 		# OTHER
 		self.main_target_distance_torelance = 3.0

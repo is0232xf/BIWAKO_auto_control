@@ -20,10 +20,17 @@ from INA226 import INA226
 const = parameter()
 
 control_mode = const.control_mode
-if control_mode == 0:
+strategy = const.strategy
+
+if control_mode is 0:
     print('CONTROL MODE: OMNIDIRECTIONAL CONTROL')
-elif control_mode == 1:
+elif control_mode is 1:
     print('CONTROL MODE: DIAGONAL CONTROL')
+
+if strategy is 0:
+    print('STRATEGY: SIMPLE STRATEGY')
+elif strategy is 1:
+    print('STRATEGY: FLEX STRATEGY')
 
 # read waypoint file (csv)
 target_point_file = const.way_point_file
@@ -166,6 +173,8 @@ if __name__ == '__main__':
     elif control_mode == 1:
         print('CONTROL MODE: DIAGONAL CONTROL')
 
+    strategy = const.strategy
+
     main_target_distance_torelance = const.main_target_distance_torelance
     temp_target_distance_torelance = const.temp_target_distance_torelance
     heading_torelance = const.heading_torelance
@@ -227,10 +236,13 @@ if __name__ == '__main__':
                 time.sleep(0.02)
 
             else:
-                if is_first is 0:
+                if is_first is 0 or strategy is 0:
                     BIWAKO.temp_goal = BIWAKO.next_goal
-                elif is_first is 1:
+                    temp_target_distance_torelance = main_target_distance_torelance
+                elif is_first is 1 and strategy is 1:
                     BIWAKO.temp_goal = calc_temp_target(current_point, BIWAKO.next_goal)
+                    temp_target_distance_torelance = const.temp_target_distance_torelance
+
                 while abs(diff_distance) > temp_target_distance_torelance:
                     pose = [BIWAKO.lat, BIWAKO.lon, BIWAKO.yaw]
 
