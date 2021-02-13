@@ -20,6 +20,8 @@ def PD_heading_control(diff_deg, e):
     Kp = const.degree_Kp
     Kd = const.degree_Kd
 
+    offset = const.PWM_OFFSET
+
     MAX_PULSE = const.MAX_PULSE
     MIN_PULSE = const.MIN_PULSE
 
@@ -30,9 +32,9 @@ def PD_heading_control(diff_deg, e):
     t_out = int(1500 + (Kp * diff_deg + Kd * diff_e * (1/0.02)))
 
     if t_out < MIN_PULSE:
-        t_out = MIN_PULSE
+        t_out = MIN_PULSE - offset
     elif t_out > MAX_PULSE:
-        t_out = MAX_PULSE
+        t_out = MAX_PULSE + offset
 
     action = [ch, t_out]
     return action
@@ -50,6 +52,7 @@ def stay_action():
 def omni_control_action(diff_deg, diff_distance):
     pwm = P_control(diff_distance)
     cmd = 0
+
     if -45.0 <= diff_deg < 45:
         ch = 5
         cmd = 1
