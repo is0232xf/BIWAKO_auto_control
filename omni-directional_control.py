@@ -243,6 +243,7 @@ if __name__ == '__main__':
                     BIWAKO.temp_goal = calc_temp_target(current_point, BIWAKO.next_goal)
                     temp_target_distance_torelance = const.temp_target_distance_torelance
 
+                diff_distance = round(mpu.haversine_distance(current_point, BIWAKO.temp_goal), 5)*1000
                 while abs(diff_distance) > temp_target_distance_torelance:
                     pose = [BIWAKO.lat, BIWAKO.lon, BIWAKO.yaw]
 
