@@ -75,29 +75,68 @@ def set_arm_disarm(msg):
 
 # update the robot state
 def update_robot_state():
-    GPS_message = master.recv_match(type='GLOBAL_POSITION_INT', blocking=True).to_dict()
     attitude_message = master.recv_match(type='ATTITUDE', blocking=True).to_dict()
-    lon = float(GPS_message['lon'])/10**7
-    lat = float(GPS_message['lat'])/10**7
     yaw = float(attitude_message['yaw'])
-
-    BIWAKO.lon = lon
-    BIWAKO.lat = lat
     BIWAKO.yaw = yaw
+    if int(BIWAKO.count*10) % 10 == 0:
+        GPS_message = master.recv_match(type='GLOBAL_POSITION_INT', blocking=True).to_dict()
+        lon = float(GPS_message['lon'])/10**7
+        lat = float(GPS_message['lat'])/10**7
+        BIWAKO.lon = lon
+        BIWAKO.lat = lat
+    else:
+        pass
 
 # control thrusters
-def control_thruster(action, ch=0, pwm=1500):
+def control_thruster(action, pwm_data, ch=0, pwm=1500):
+    max_diff = (const.MAX_PULSE + const.PWM_OFFSET) - 1500
+    min_diff = (const.MIN_PULSE - const.PWM_OFFSET) - 1500
+    prev_pwm = pwm_data[len(pwm_data)-2]
+    def phased_control(diff_pwm, prev_pwm, rc_channel_values):
+        if diff_pwm >= 0:
+            if diff_pwm >= max_diff:
+                base_pwm = 1500
+            elif 0 <= diff_pwm < max_diff:
+                base_pwm = prev_pwm
+            if abs(diff_pwm) == 0:
+                pass
+            else:
+                interval = 0.1 / abs(diff_pwm)
+                for i in range(diff_pwm):
+                    phase_pwm = base_pwm + i
+                    rc_channel_values[ch - 1] = phase_pwm
+                    master.mav.rc_channels_override_send(
+                        master.target_system,                # target_system
+                        master.target_component,             # target_component
+                        *rc_channel_values)                  # RC channel list, in microseconds.
+                    time.sleep(interval)
+
+        elif diff_pwm < 0:
+            if min_diff < diff_pwm < 0:
+                base_pwm = prev_pwm
+            elif diff_pwm <= min_diff:
+                base_pwm = 1500
+            interval = 0.1 / abs(diff_pwm)
+            for i in range(diff_pwm):
+                phase_pwm = base_pwm - i
+                rc_channel_values[ch - 1] = phase_pwm
+                master.mav.rc_channels_override_send(
+                    master.target_system,                # target_system
+                    master.target_component,             # target_component
+                    *rc_channel_values)                  # RC channel list, in microseconds.
+                time.sleep(interval)
+
+
     ch = action[0]
     pwm = action[1]
     if ch < 1:
         print("Channel does not exist.")
     if ch < 9:
         rc_channel_values = [65535 for _ in range(8)]
-        rc_channel_values[ch - 1] = pwm
-        master.mav.rc_channels_override_send(
-            master.target_system,                # target_system
-            master.target_component,             # target_component
-            *rc_channel_values)                  # RC channel list, in microseconds.
+
+    diff_pwm = pwm - prev_pwm
+    phased_control(diff_pwm, prev_pwm, rc_channel_values)
+
 
 # calculate heading difference between current point to target point
 def calc_heading_diff(way_point):
@@ -149,16 +188,6 @@ def update_wt():
         wt_sensor.wt = wt_sensor.observation()
 
 ###############################################################################
-# Initialize the robot
-set_mode('MANUAL')
-print("Set mode to Manual")
-initial_action = [4, 1500]
-print('Initialize...')
-print('Wait seven second...')
-control_thruster(initial_action)
-time.sleep(7)
-master.arducopter_arm()
-print("Arm/Disarm: Arm")
 
 
 if __name__ == '__main__':
@@ -191,6 +220,7 @@ if __name__ == '__main__':
         update_wt_thread.start()
 
     log_data = []
+    pwm_data = [1500]
     deg_e = [0]
     is_first = 0
 
@@ -212,6 +242,16 @@ if __name__ == '__main__':
                           'pwm', 'voltage', 'current', 'power_consumption']
 
         csvWriter.writerow(data_items)
+        # Initialize the robot
+        set_mode('MANUAL')
+    print("Set mode to Manual")
+    initial_action = [4, 1500]
+    print('Initialize...')
+    print('Wait seven second...')
+    control_thruster(initial_action, pwm_data)
+    time.sleep(7)
+    master.arducopter_arm()
+    print("Arm/Disarm: Arm")
 
     try:
         if wt_log_mode is True:
@@ -219,7 +259,7 @@ if __name__ == '__main__':
         elif wt_log_mode is False:
             signal.signal(signal.SIGALRM, logging)
 
-        signal.setitimer(signal.ITIMER_REAL, 0.5, 0.5)
+        signal.setitimer(signal.ITIMER_REAL, 0.5, 0.1)
         while True:
             pose = [BIWAKO.lon, BIWAKO.lat, BIWAKO.yaw]
             # decide the next action from current robot status and the next waypoint
@@ -258,9 +298,11 @@ if __name__ == '__main__':
                     deg_e.append(diff_deg)
                     if control_mode == 0:
                         action = actions.omni_control_action(diff_deg, diff_distance)
+                        pwm_data.append(action[1])
                         BIWAKO.cmd = action[0]
                         BIWAKO.pwm = action[1]
-                        control_thruster(action)
+                        control_thruster(action, pwm_data)
+                        time.sleep(0.01)
 
                     elif control_mode == 1:
                         action = actions.diagonal_action(diff_deg, diff_distance, deg_e)
@@ -269,7 +311,7 @@ if __name__ == '__main__':
                         BIWAKO.cmd = [action[0][0], action[1][0]]
                         BIWAKO.pwm = [action[0][1], action[1][1]]
 
-                    time.sleep(0.02)
+                    # time.sleep(0.02)
 
         if (state_data_log is True):
             for i in range(len(log_data)):
@@ -281,7 +323,7 @@ if __name__ == '__main__':
         master.arducopter_disarm()
         print("Arm/Disarm: Disarm")
         signal.signal(signal.SIGALRM, kill_signal_process)
-        signal.setitimer(signal.ITIMER_REAL, 1, 0.5)
+        signal.setitimer(signal.ITIMER_REAL, 0.1, 0.1)
 
     except KeyboardInterrupt:
         if (state_data_log is True):
@@ -296,4 +338,4 @@ if __name__ == '__main__':
         print("Arm/Disarm: Disarm")
         time.sleep(3)
         signal.signal(signal.SIGALRM, kill_signal_process)
-        signal.setitimer(signal.ITIMER_REAL, 1, 0.5)
+        signal.setitimer(signal.ITIMER_REAL, 0.1, 0.1)
