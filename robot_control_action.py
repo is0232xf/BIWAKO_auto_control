@@ -25,8 +25,6 @@ def PD_heading_control(diff_deg, e):
     MAX_PULSE = const.MAX_PULSE
     MIN_PULSE = const.MIN_PULSE
 
-    ch = 4
-
     diff_e = e[len(e)-2]-e[len(e)-1]
 
     t_out = int(1500 + (Kp * diff_deg + Kd * diff_e * (1/0.02)))
@@ -36,11 +34,11 @@ def PD_heading_control(diff_deg, e):
     elif t_out > MAX_PULSE:
         t_out = MAX_PULSE + offset
 
-    action = [ch, t_out]
-    return action
+    pwm = t_out
+    return pwm
 
 def stay_action():
-    ch = 4
+    ch = 1
     pwm = 1500
     action = [ch, pwm]
 
@@ -63,11 +61,11 @@ def omni_control_action(diff_deg, diff_distance):
         cmd = 2
 
     elif 45.0 <= diff_deg < 135.0:
-        ch = 6
+        ch = 4
         cmd = 3
 
     elif -135.0 <= diff_deg < -45.0:
-        ch = 6
+        ch = 4
         pwm = 3000 - pwm
         cmd = 4
 
@@ -153,4 +151,36 @@ def diagonal_action(diff_deg, diff_distance, deg_e):
         print("diff deg: ", diff_deg)
         print("diff distance: ", diff_distance)
 
+    return action
+
+def fixed_head_action(diff_deg, diff_distance, deg_e):
+    # heading_torelance = const.heading_torelance
+    heading_torelance = 10
+    cmd = 0
+    if abs(diff_deg) < heading_torelance:
+        ch = 5
+        pwm = P_control(diff_distance)
+        cmd = 1
+    elif diff_deg >= heading_torelance:
+        ch = 6
+        pwm = PD_heading_control(diff_deg, deg_e)
+        cmd = 2
+    elif diff_deg < -1.0 * heading_torelance:
+        ch = 6
+        pwm = PD_heading_control(diff_deg, deg_e)
+        cmd = 3
+    action = [ch, pwm]
+
+    if const.debug_mode is True:
+        if cmd is 1:
+            print('FORWARD')
+        elif cmd is 2:
+            print('CW')
+        elif cmd is 3:
+            print('CCW')
+        else:
+            print('No Command')
+        print("action: ", action)
+        print("diff deg: ", diff_deg)
+        print("diff distance: ", diff_distance)
     return action

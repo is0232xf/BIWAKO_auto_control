@@ -78,29 +78,57 @@ def update_robot_state():
     attitude_message = master.recv_match(type='ATTITUDE', blocking=True).to_dict()
     yaw = float(attitude_message['yaw'])
     BIWAKO.yaw = yaw
-    if int(BIWAKO.count*10) % 10 == 0:
+    if int(BIWAKO.count*10) % 5 == 0:
         GPS_message = master.recv_match(type='GLOBAL_POSITION_INT', blocking=True).to_dict()
         lon = float(GPS_message['lon'])/10**7
         lat = float(GPS_message['lat'])/10**7
         BIWAKO.lon = lon
         BIWAKO.lat = lat
-    else:
-        pass
 
 # control thrusters
-def control_thruster(action, pwm_data, ch=0, pwm=1500):
+def control_thruster(action, action_log, thruster_control, ch=1, pwm=1500):
+    ch = action[0]
+    pwm = action[1]
+    if ch < 1:
+        print("Channel does not exist.")
+    if ch < 9:
+        rc_channel_values = [65535 for _ in range(8)]
+
     max_diff = (const.MAX_PULSE + const.PWM_OFFSET) - 1500
     min_diff = (const.MIN_PULSE - const.PWM_OFFSET) - 1500
-    prev_pwm = pwm_data[len(pwm_data)-2]
+    prev_ch = action_log[len(action_log)-2][0]
+    prev_pwm = action_log[len(action_log)-2][1]
+    diff_pwm = pwm - prev_pwm
+    diff_ch = ch - prev_ch
+
+    def simple_control(ch, pwm):
+        interval = 0.02
+        rc_channel_values[ch - 1] = pwm
+        master.mav.rc_channels_override_send(
+            master.target_system,                # target_system
+            master.target_component,             # target_component
+            *rc_channel_values)                  # RC channel list, in microseconds.
+        time.sleep(interval)
+
     def phased_control(diff_pwm, prev_pwm, rc_channel_values):
+        if diff_pwm == 0 and diff_ch != 0:
+            diff_pwm = pwm - 1500
+            time.sleep(0.1)
         if diff_pwm >= 0:
             if diff_pwm >= max_diff:
                 base_pwm = 1500
             elif 0 <= diff_pwm < max_diff:
                 base_pwm = prev_pwm
-            if abs(diff_pwm) == 0:
-                pass
+            if abs(diff_pwm) == 0 and diff_ch == 0:
+                interval = 0.02
+                rc_channel_values[ch - 1] = base_pwm
+                master.mav.rc_channels_override_send(
+                    master.target_system,                # target_system
+                    master.target_component,             # target_component
+                    *rc_channel_values)                  # RC channel list, in microseconds.
+                # time.sleep(interval)
             else:
+                time.sleep(0.1)
                 interval = 0.1 / abs(diff_pwm)
                 for i in range(diff_pwm):
                     phase_pwm = base_pwm + i
@@ -125,19 +153,13 @@ def control_thruster(action, pwm_data, ch=0, pwm=1500):
                     master.target_component,             # target_component
                     *rc_channel_values)                  # RC channel list, in microseconds.
                 time.sleep(interval)
-
-
-    ch = action[0]
-    pwm = action[1]
-    if ch < 1:
-        print("Channel does not exist.")
-    if ch < 9:
-        rc_channel_values = [65535 for _ in range(8)]
-
-    diff_pwm = pwm - prev_pwm
-    phased_control(diff_pwm, prev_pwm, rc_channel_values)
-
-
+    simple_control(ch, pwm)
+    """
+    if thruster_control == 0:
+        simple_control(ch, pwm)
+    elif thruster_control == 1:
+        phased_control(diff_pwm, prev_pwm, rc_channel_values)
+    """
 # calculate heading difference between current point to target point
 def calc_heading_diff(way_point):
     t_lon = math.radians(way_point[0])
@@ -159,7 +181,7 @@ def logging(arg1, args2):
     c = power_sensor.get_current()
     p = power_sensor.get_power()
     unix_time = time.time()
-    BIWAKO.count = BIWAKO.count + 0.1
+    BIWAKO.count = BIWAKO.count + const.timer
     data = [unix_time, BIWAKO.count, BIWAKO.lat, BIWAKO.lon, math.degrees(BIWAKO.yaw),
             BIWAKO.cmd, BIWAKO.pwm, v, c, p]
     log_data.append(data)
@@ -171,7 +193,7 @@ def logging_with_wt(arg1, args2):
     c = power_sensor.get_current()
     p = power_sensor.get_power()
     unix_time = time.time()
-    BIWAKO.count = BIWAKO.count + 0.1
+    BIWAKO.count = BIWAKO.count + const.timer
     data = [unix_time, BIWAKO.count, BIWAKO.lat, BIWAKO.lon, math.degrees(BIWAKO.yaw),
             BIWAKO.cmd, BIWAKO.pwm, wt, v, c, p]
     log_data.append(data)
@@ -208,6 +230,7 @@ if __name__ == '__main__':
     temp_target_distance_torelance = const.temp_target_distance_torelance
     heading_torelance = const.heading_torelance
     keep_time = const.duration
+    thruster_control = const.thruster_control
 
     BIWAKO = Robot(target_point)
     addr = 0x40
@@ -220,12 +243,9 @@ if __name__ == '__main__':
         update_wt_thread.start()
 
     log_data = []
-    pwm_data = [1500]
+    action_log = [[4, 1500]]
     deg_e = [0]
     is_first = 0
-
-    ############ start to measure the second ############
-    start_time = 0.0
 
     if (state_data_log is True):
         # get date time object
@@ -248,8 +268,8 @@ if __name__ == '__main__':
     initial_action = [4, 1500]
     print('Initialize...')
     print('Wait seven second...')
-    control_thruster(initial_action, pwm_data)
-    time.sleep(7)
+    control_thruster(initial_action, action_log, thruster_control)
+    time.sleep(3)
     master.arducopter_arm()
     print("Arm/Disarm: Arm")
 
@@ -259,7 +279,7 @@ if __name__ == '__main__':
         elif wt_log_mode is False:
             signal.signal(signal.SIGALRM, logging)
 
-        signal.setitimer(signal.ITIMER_REAL, 0.5, 0.1)
+        signal.setitimer(signal.ITIMER_REAL, 0.5, const.timer)
         while True:
             pose = [BIWAKO.lon, BIWAKO.lat, BIWAKO.yaw]
             # decide the next action from current robot status and the next waypoint
@@ -272,7 +292,7 @@ if __name__ == '__main__':
                 action = actions.stay_action()
                 BIWAKO.cmd = action[0]
                 BIWAKO.pwm = action[1]
-                control_thruster(action)
+                control_thruster(action, action_log, thruster_control)
                 time.sleep(0.02)
 
             else:
@@ -298,10 +318,10 @@ if __name__ == '__main__':
                     deg_e.append(diff_deg)
                     if control_mode == 0:
                         action = actions.omni_control_action(diff_deg, diff_distance)
-                        pwm_data.append(action[1])
+                        action_log.append(action)
                         BIWAKO.cmd = action[0]
                         BIWAKO.pwm = action[1]
-                        control_thruster(action, pwm_data)
+                        control_thruster(action, action_log, thruster_control)
                         time.sleep(0.01)
 
                     elif control_mode == 1:
@@ -310,6 +330,14 @@ if __name__ == '__main__':
                         control_thruster(action[1])
                         BIWAKO.cmd = [action[0][0], action[1][0]]
                         BIWAKO.pwm = [action[0][1], action[1][1]]
+
+                    elif control_mode == 2:
+                        action = actions.fixed_head_action(diff_deg, diff_distance, deg_e)
+                        action_log.append(action)
+                        BIWAKO.cmd = action[0]
+                        BIWAKO.pwm = action[1]
+                        control_thruster(action, action_log, thruster_control)
+                        time.sleep(0.01)
 
                     # time.sleep(0.02)
 
